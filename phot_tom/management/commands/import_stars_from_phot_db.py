@@ -32,6 +32,23 @@ class Command(BaseCommand):
                  'vphas_imag', 'vphas_imag_error', 'vphas_clean']
         
         return star_keys
+    
+    def check_star_in_tom(self,star_name):
+        
+        qs = Target.objects.filter(identifier=star_name)
+        
+        if len(qs) == 1:
+            return qs[0]
+        elif len(qs) > 1:
+            raise IOError('Multiple database entries for star '+star_name)
+        else:
+            return None
+    
+    def get_target_extra_params(self,target):
+        
+        qs = TargetExtra.objects.filter(target=target)
+        
+        return qs
         
     def handle(self, *args, **options):
         
@@ -50,39 +67,67 @@ class Command(BaseCommand):
         
         #pri_phot_table = self.fetch_primary_reference_photometry(conn,pri_refimg)
         
-        for j,star in enumerate(stars_table[:10]):
+        for j,star in enumerate(stars_table):
             
             s = SkyCoord(star['ra'], star['dec'], 
                          frame='icrs', unit=(u.deg, u.deg))
             
-            base_params = {'identifier': str(options['field_name'])+'-'+str(star['star_index']),
-                            'name': str(options['field_name'])+'-'+str(star['star_index']),
+            star_name = str(options['field_name'])+'-'+str(star['star_index'])
+            
+            base_params = {'identifier': star_name,
+                            'name': star_name,
                             'ra': star['ra'],
                             'dec': star['dec'],
                             'galactic_lng': s.galactic.l.deg,
                             'galactic_lat': s.galactic.b.deg,
                             }
                         
-            extra_params = [ ('reference_image',pri_refimg['filename'][0]) ]
+            extra_params = { 'reference_image': pri_refimg['filename'][0] }
             for key in self.star_extra_params():
-                extra_params.append( ( key, star[key] ) )
+                extra_params[key] = star[key]
             
-            print(extra_params)
             
             #print(extra_params)
             #import pdb;pdb.set_trace()
             
-            #try:
-            target = Target.objects.create(**base_params)
-            print(target)
-            print(' -> Created target for star '+str(options['field_name'])+'-'+str(star['star_index']))
+            known_target = self.check_star_in_tom(star_name)
             
-            for extra in extra_params:
-                print(target,extra[0])
-                TargetExtra.objects.create(target=target, key=extra[0], value=extra[1])
-            
-            print(' -> Ingested extra parameters')
-            
+            if known_target == None:
+                try:
+                    target = Target.objects.create(**base_params)
+                    print(' -> Created target for star '+star_name)
+                    
+                    for key, value in extra_params.items():
+                        TargetExtra.objects.create(target=target, key=key, value=value)
+                    print(' -> Ingested extra parameters')
+                except OverflowError:
+                    print(base_params,extra_params)
+                    exit()
+            else:
+                
+                try:
+                    print(' -> '+star_name+' already in database')
+                    
+                    for key, value in base_params.items():
+                        setattr(known_target,key,value)
+                    known_target.save()
+                    print(' -> Updated parameters for '+star_name)
+                    
+                    qs = self.get_target_extra_params(known_target)
+                    
+                    print(' -> Found '+str(len(qs))+' extra parameters for this target')
+                    
+                    for key, value in extra_params.items():
+                        
+                        for ts in qs:
+                            if ts.key == key:
+                                ts.value = value
+                                ts.save()
+                    print(' -> Updated extra parameters')
+                except OverflowError:
+                    print(base_params,extra_params)
+                    exit()
+                    
             #import pdb;pdb.set_trace()
             
             #except Exception as e:
