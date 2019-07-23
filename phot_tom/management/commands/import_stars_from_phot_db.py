@@ -80,6 +80,7 @@ class Command(BaseCommand):
                             'dec': star['dec'],
                             'galactic_lng': s.galactic.l.deg,
                             'galactic_lat': s.galactic.b.deg,
+                            'type': Target.SIDEREAL,
                             }
                         
             extra_params = { 'reference_image': pri_refimg['filename'][0] }
@@ -98,6 +99,7 @@ class Command(BaseCommand):
                     print(' -> Created target for star '+star_name)
                     
                     for key, value in extra_params.items():
+                        print('Submitting key ',key, value)
                         TargetExtra.objects.create(target=target, key=key, value=value)
                     print(' -> Ingested extra parameters')
                 except OverflowError:
@@ -121,6 +123,7 @@ class Command(BaseCommand):
                         
                         for ts in qs:
                             if ts.key == key:
+                                print('Submitting key ',key, value)
                                 ts.value = value
                                 ts.save()
                     print(' -> Updated extra parameters')
