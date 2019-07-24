@@ -1,10 +1,54 @@
 {% extends 'tom_common/base.html' %}
 {% load comments bootstrap4 tom_common_extras targets_extras observation_extras dataproduct_extras static cache %}
+{% load fields_view_tag %}
 {% block title %}Target {{ object.name }}{% endblock %}
 {% block additional_css %}
 <link rel="stylesheet" href="{% static 'tom_targets/css/main.css' %}">
 {% endblock %}
 {% block content %}
+{% if target.extra_fields.target_type == '"field"' %}
+<div class="row">
+  <div class="col-md-4">
+    <div id="target-info">
+      {% target_feature object %}
+      {% target_data object %}
+      {% aladin object %}
+    </div>
+  </div>
+  <div class="col-md-8">
+    <ul class="nav nav-tabs" id="tabs">
+      <li class="nav-item">
+        <span class="nav-link active" data-target="#field-image" data-toggle="tab">Field Image</span>
+      </li>
+      <li class="nav-item">
+        <span class="nav-link" data-target="#manage-data" data-toggle="tab">Manage Data</span>
+      </li>
+      <li class="nav-item">
+        <span class="nav-link" data-target="#photometry" data-toggle="tab">Photometry</span>
+      </li>
+      <li class="nav-item">
+        <span class="nav-link" data-target="#spectroscopy" data-toggle="tab">Spectroscopy</span>
+      </li>
+    </ul>
+    <div class="tab-content">
+      <div class="tab-pane in active" id="field-image">
+          <p class="text-center">Full colour image for {{object.name}}</p>
+          <p class="text-center">{% field_image object %}</p>
+      </div>
+      <div class="tab-pane" id="manage-data">
+        {% include 'tom_dataproducts/upload_dataproduct.html' %}
+        {% dataproduct_list_for_target object %}
+      </div>
+      <div class="tab-pane" id="photometry">
+        {% photometry_for_target target %}
+        </div>
+      <div class="tab-pane" id="spectroscopy">
+        {% spectroscopy_for_target target %}
+      </div>
+    </div>
+  </div>
+</div>
+{% else %}
 <div class="row">
   <div class="col-md-4">
     <div id="target-info">
@@ -21,6 +65,12 @@
   <div class="col-md-8">
     <ul class="nav nav-tabs" id="tabs">
       <li class="nav-item">
+        <span class="nav-link active" data-target="#observe" data-toggle="tab">Observe</span>
+      </li>
+      <li class="nav-item">
+        <span class="nav-link" data-target="#observations" data-toggle="tab">Observations</span>
+      </li>
+      <li class="nav-item">
         <span class="nav-link" data-target="#manage-data" data-toggle="tab">Manage Data</span>
       </li>
       <li class="nav-item">
@@ -31,6 +81,18 @@
       </li>
     </ul>
     <div class="tab-content">
+      <div class="tab-pane in active" id="observe">
+        <h4>Observe</h4>
+        {% observing_buttons object %}
+        <hr/>
+        <h4>Plan</h4>
+        {% target_plan %}
+      </div>
+      <div class="tab-pane" id="observations">
+        <h4>Observations</h4>
+        <a href="{% url 'targets:detail' pk=target.id %}?update_status=True" title="Update status of observations for target" class="btn btn-primary">Update Observations Status</a>
+        {% observation_list object %}
+      </div>
       <div class="tab-pane" id="manage-data">
         {% include 'tom_dataproducts/upload_dataproduct.html' %}
         {% dataproduct_list_for_target object %}
@@ -54,4 +116,5 @@
     </div>
   </div>
 </div>
+{% endif %}
 {% endblock %}

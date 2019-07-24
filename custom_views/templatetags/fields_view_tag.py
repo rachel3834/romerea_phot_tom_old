@@ -30,3 +30,9 @@ def fields_table():
     
     return {'table_columns': table_columns, 'table_rows': table_rows}
 
+@register.inclusion_tag('custom_views/display_field_image.html')
+def field_image(target):
+    
+    image_file = 'img/'+str(target.name)+'_colour.png'
+    
+    return {'target_image': image_file}
