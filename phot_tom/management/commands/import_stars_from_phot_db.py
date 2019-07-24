@@ -22,14 +22,27 @@ class Command(BaseCommand):
         
     def star_extra_params(self):
         
-        star_keys = ['gaia_source_id', 'gaia_ra', 'gaia_ra_error', 'gaia_dec', 'gaia_dec_error', 
-                 'gaia_phot_g_mean_flux', 'gaia_phot_g_mean_flux_error', 
-                 'gaia_phot_bp_mean_flux', 'gaia_phot_bp_mean_flux_error', 
-                 'gaia_phot_rp_mean_flux', 'gaia_phot_rp_mean_flux_error',
-                 'vphas_source_id', 'vphas_ra', 'vphas_dec', 
-                 'vphas_gmag', 'vphas_gmag_error', 
-                 'vphas_rmag', 'vphas_rmag_error', 
-                 'vphas_imag', 'vphas_imag_error', 'vphas_clean']
+        star_keys = {'gaia_source_id': 'string', 
+                     'gaia_ra': 'float', 
+                     'gaia_ra_error': 'float', 
+                     'gaia_dec': 'float', 
+                     'gaia_dec_error': 'float', 
+                     'gaia_phot_g_mean_flux': 'float', 
+                     'gaia_phot_g_mean_flux_error': 'float', 
+                     'gaia_phot_bp_mean_flux': 'float', 
+                     'gaia_phot_bp_mean_flux_error': 'float', 
+                     'gaia_phot_rp_mean_flux': 'float', 
+                     'gaia_phot_rp_mean_flux_error': 'float',
+                     'vphas_source_id': 'string', 
+                     'vphas_ra': 'float', 
+                     'vphas_dec': 'float', 
+                     'vphas_gmag': 'float', 
+                     'vphas_gmag_error': 'float', 
+                     'vphas_rmag': 'float', 
+                     'vphas_rmag_error': 'float', 
+                     'vphas_imag': 'float', 
+                     'vphas_imag_error': 'float', 
+                     'vphas_clean': 'float'}
         
         return star_keys
     
@@ -49,8 +62,25 @@ class Command(BaseCommand):
         qs = TargetExtra.objects.filter(target=target)
         
         return qs
+    
+    def create_target_extra_with_type(self, target, key, value, key_type):
         
+        if key_type == 'string':
+            TargetExtra.objects.create(target=target, key=key, value='"'+str(value)+'"')
+        else:
+            TargetExtra.objects.create(target=target, key=key, value=value)
+    
+    def update_target_extra_with_type(self, target_extra, value, key_type):
+        
+        if key_type == 'string':
+            target_extra.value = '"'+str(value)+'"'
+        else:
+            target_extra.value = value
+        target_extra.save()
+                            
     def handle(self, *args, **options):
+        
+        verbose = False
         
         self.check_arguments(options)
         
@@ -67,7 +97,9 @@ class Command(BaseCommand):
         
         #pri_phot_table = self.fetch_primary_reference_photometry(conn,pri_refimg)
         
-        for j,star in enumerate(stars_table):
+        jincr = int(float(len(stars_table))*0.01)
+        
+        for j,star in enumerate(stars_table[44191:]):
             
             s = SkyCoord(star['ra'], star['dec'], 
                          frame='icrs', unit=(u.deg, u.deg))
@@ -82,11 +114,15 @@ class Command(BaseCommand):
                             'galactic_lat': s.galactic.b.deg,
                             'type': Target.SIDEREAL,
                             }
-                        
-            extra_params = { 'reference_image': pri_refimg['filename'][0] }
-            for key in self.star_extra_params():
-                extra_params[key] = star[key]
             
+            #print(base_params)
+            extra_params = { 'reference_image': pri_refimg['filename'][0],
+                             'target_type': 'star' }
+            for key,key_type in self.star_extra_params().items():
+                if key_type == 'string':
+                    extra_params[key] = str(star[key])
+                else:
+                    extra_params[key] = float(star[key])
             
             #print(extra_params)
             #import pdb;pdb.set_trace()
@@ -94,48 +130,66 @@ class Command(BaseCommand):
             known_target = self.check_star_in_tom(star_name)
             
             if known_target == None:
-                try:
-                    target = Target.objects.create(**base_params)
-                    print(' -> Created target for star '+star_name)
+                #try:
+                target = Target.objects.create(**base_params)
+                if verbose: print(' -> Created target for star '+star_name)
+                
+                for key,key_type in self.star_extra_params().items():
                     
-                    for key, value in extra_params.items():
-                        print('Submitting key ',key, value)
-                        TargetExtra.objects.create(target=target, key=key, value=value)
-                    print(' -> Ingested extra parameters')
-                except OverflowError:
-                    print(base_params,extra_params)
-                    exit()
+                    value = extra_params[key]
+                    
+                    if verbose: print('Submitting key ',key, value, type(value))
+                    
+                    self.create_target_extra_with_type(target, key, value, key_type)
+                    
+                if verbose: print(' -> Ingested extra parameters')
+                #except OverflowError:
+                #    print(base_params,extra_params)
+                #    exit()
             else:
                 
-                try:
-                    print(' -> '+star_name+' already in database')
+                #try:
+                if verbose: print(' -> '+star_name+' already in database')
+                
+                for key, value in base_params.items():
+                    setattr(known_target,key,value)
+                known_target.save()
+                if verbose: print(' -> Updated parameters for '+star_name)
+                
+                qs = self.get_target_extra_params(known_target)
+                
+                if verbose: print(' -> Found '+str(len(qs))+' extra parameters for this target')
                     
-                    for key, value in base_params.items():
-                        setattr(known_target,key,value)
-                    known_target.save()
-                    print(' -> Updated parameters for '+star_name)
+                for key,key_type in self.star_extra_params().items():
                     
-                    qs = self.get_target_extra_params(known_target)
+                    value = extra_params[key]
                     
-                    print(' -> Found '+str(len(qs))+' extra parameters for this target')
-                    
-                    for key, value in extra_params.items():
+                    for ts in qs:
+
+                        got_key = False
                         
-                        for ts in qs:
-                            if ts.key == key:
-                                print('Submitting key ',key, value)
-                                ts.value = value
-                                ts.save()
-                    print(' -> Updated extra parameters')
-                except OverflowError:
-                    print(base_params,extra_params)
-                    exit()
+                        if ts.key == key:
+                            if verbose: print('Submitting key ',key, value, type(value))
+                            
+                            self.update_target_extra_with_type(ts, value, key_type)
+                            
+                            got_key = True
+                            
+                    if not got_key:
+                        if verbose: print('Adding extra key ',key,value,type(value))
+                        self.create_target_extra_with_type(known_target, key, value, key_type)
                     
-            #import pdb;pdb.set_trace()
+                if verbose: print(' -> Updated extra parameters')
+                #except OverflowError:
+                #    print(base_params,extra_params)
+                #    exit()
             
-            #except Exception as e:
-            #    error = 'Error ingesting star '+str(j)+', '+str(options['field_name'])+'-'+str(star['star_index']),
-            #    errors.append(error)
+            if j%jincr == 0:
+                percentage = round((float(j)/float(len(stars_table)))*100.0,0)
+                print(' -> Ingested '+str(percentage)+\
+                            '% complete ('+str(j)+' stars out of '+\
+                            str(len(stars_table))+')')
+            #import pdb;pdb.set_trace()
             
     def fetch_primary_reference_image_from_phot_db(self,conn):
         

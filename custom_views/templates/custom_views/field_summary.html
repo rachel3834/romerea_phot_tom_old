@@ -1,0 +1,15 @@
+{% extends 'tom_common/base.html' %}
+{% block title %}Field {{object.name}}{% endblock %}
+{% block content %}
+<div class="row">
+  <div class="col-lg-6">
+    <h2 class="text-center">{{ object.name }}</h2>
+    <p class="text-center"><img src="{% static 'img/{{object.name}}_colour.png' %}" class="img-fluid mx-auto"></p>
+  </div>
+  <div class="col-lg-6">
+    {% if object.type == 'field' %}
+    {% else %}
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

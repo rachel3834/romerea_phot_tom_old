@@ -54,6 +54,7 @@ INSTALLED_APPS = [
     'tom_observations',
     'tom_dataproducts',
     'phot_tom',
+    'custom_views',
 ]
 
 SITE_ID = 1
@@ -230,6 +231,7 @@ TOM_ALERT_CLASSES = [
 #     {'name': 'dicovery_date', 'type': 'datetime'}
 # ]
 EXTRA_FIELDS = [
+    {'name': 'target_type', 'type': 'string'},
     {'name': 'star_index', 'type': 'number'},
     {'name': 'rome_field', 'type': 'string'},
     {'name': 'reference_image', 'type': 'string'},

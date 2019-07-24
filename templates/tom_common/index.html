@@ -1,25 +1,15 @@
 {% extends 'tom_common/base.html' %}
 {% load static targets_extras observation_extras dataproduct_extras tom_common_extras %}
+{% load fields_view_tag %}
 {% block title %}ROME/REA Photometry TOM{% endblock %}
 {% block content %}
-<div class="row">
-  <div class="col-md-8">
+<div class="row" width="100%">
+  <div class="col-lg-6">
     <h2 class="text-center">ROME/REA Photometry TOM</h2>
     <p class="text-center"><img src="{% static 'img/ROME_FIELDS_fa15.jpeg' %}" class="img-fluid mx-auto"></p>
   </div>
-  <div class="col-md-4">
-    <div class="card">
-      <div class="card-header">
-        Latest Comments
-      </div>
-      {% recent_comments %}
-    </div>
-    <br/>
-    <div class="card">
-      <div class="card-header">
-        Latest Targets
-      </div>
-      {% recent_targets %}
+  <div class="col-lg-6">
+    {% fields_table %}
   </div>
 </div>
 {% endblock %}

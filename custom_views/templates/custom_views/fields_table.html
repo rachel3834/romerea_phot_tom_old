@@ -1,0 +1,15 @@
+<table>
+<tr>
+{% for header in table_columns %}
+    <th>{{ header }}</th>
+{% endfor %}
+</tr>
+{% for row in table_rows %}
+    <tr>
+    <td><a href="{% url 'targets:detail' row.0 %}" title="{{ row.0 }}">{{ row.1 }}</td>
+    <td>{{ row.2 }}</td>
+    <td>{{ row.3 }}</td>
+    <td>{{ row.4 }}</td>
+    </tr>
+{% endfor %}
+</table>
