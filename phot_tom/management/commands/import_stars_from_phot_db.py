@@ -4,6 +4,7 @@ from pyDANDIA import phot_db
 from os import path
 from astropy.coordinates import SkyCoord
 from astropy import units as u
+import import_utils
 
 class Command(BaseCommand):
     
@@ -91,11 +92,11 @@ class Command(BaseCommand):
         
         conn = phot_db.get_connection(dsn=options['phot_db_path'])
         
-        pri_refimg = self.fetch_primary_reference_image_from_phot_db(conn)
+        pri_refimg = import_utils.fetch_primary_reference_image_from_phot_db(conn)
         
-        stars_table = self.fetch_starlist_from_phot_db(conn,pri_refimg)
+        stars_table = import_utils.fetch_starlist_from_phot_db(conn,pri_refimg)
         
-        #pri_phot_table = self.fetch_primary_reference_photometry(conn,pri_refimg)
+        #pri_phot_table = import_utils.fetch_primary_reference_photometry(conn,pri_refimg)
         
         jincr = int(float(len(stars_table))*0.01)
         
@@ -191,31 +192,3 @@ class Command(BaseCommand):
                             str(len(stars_table))+')')
             #import pdb;pdb.set_trace()
             
-    def fetch_primary_reference_image_from_phot_db(self,conn):
-        
-        query = 'SELECT reference_image FROM stars'
-        pri_refimg_id = phot_db.query_to_astropy_table(conn, query, args=())
-        
-        query = 'SELECT * FROM reference_images WHERE refimg_id="'+str(pri_refimg_id['reference_image'][0])+'"'
-        pri_refimg = phot_db.query_to_astropy_table(conn, query, args=())
-        
-        return pri_refimg
-    
-    def fetch_starlist_from_phot_db(self,conn,pri_refimg):
-        
-        query = 'SELECT * FROM stars WHERE reference_image="'+str(pri_refimg['refimg_id'][0])+'"'
-        stars_table = phot_db.query_to_astropy_table(conn, query, args=())
-
-        print('Found '+str(len(stars_table))+' stars in the photometric database')
-        
-        return stars_table
-    
-    def fetch_primary_reference_photometry(self,conn,pri_refimg):
-        
-        query = 'SELECT * FROM phot WHERE reference_image="'+str(pri_refimg['refimg_id'][0])+'"'
-        pri_phot_table = phot_db.query_to_astropy_table(conn, query, args=())
-        
-        print('Extracted '+str(len(pri_phot_table))+' photometric datapoints for the primary reference image')
-        
-        return pri_phot_table
-        
