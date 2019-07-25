@@ -1,6 +1,9 @@
 from django import template
 from astropy.coordinates import SkyCoord
 from astropy import units as u
+from plotly import offline
+import plotly.graph_objs as go
+import numpy as np
 
 from tom_targets.models import Target, TargetExtra
 
@@ -36,3 +39,69 @@ def field_image(target):
     image_file = 'img/'+str(target.name)+'_colour.png'
     
     return {'target_image': image_file}
+    
+@register.inclusion_tag('custom_views/partials/field_distribution.html')
+def field_distribution():
+
+    targetextras=TargetExtra.objects.filter(key='target_type', value='"field"')
+
+    field_width = 26.0/60.0
+    
+    locations = []
+    min_ra = 1e4
+    max_ra = -1e4
+    min_dec = 1e4
+    max_dec = -1e4
+    for e in targetextras:
+        locations.append( (e.target.ra, e.target.dec, e.target.name) )
+        min_ra = min(min_ra, (e.target.ra-field_width))
+        max_ra = max(max_ra, (e.target.ra+field_width))
+        min_dec = min(min_dec, (e.target.dec-field_width))
+        max_dec = max(max_dec, (e.target.dec+field_width))
+    
+    dra = max_ra - min_ra
+    ddec = max_dec - min_dec
+    plot_width = max(dra, ddec)
+    
+    delta_ra = (max_ra - min_ra)/5.0
+    delta_dec = (max_dec - min_dec)/5.0
+    pixscale = plot_width / 250
+    
+    data = [
+        dict(
+            lon=[l[0] for l in locations],
+            lat=[l[1] for l in locations],
+            text=[l[2] for l in locations],
+            hoverinfo='lon+lat+text',
+            mode='markers',
+            type='scattergeo',
+            marker={'symbol': 'square-open', 'size': field_width/pixscale}
+            #, 'size': field_width, 'opacity': 1,
+            #        'color': 'blue'}
+        )
+    ]
+    layout = {
+        'title': 'Distribution of Survey Fields',
+        'hovermode': 'closest',
+        'showlegend': False,
+        'geo': {
+            'projection': {
+                'type': 'mollweide',
+            },
+            'showcoastlines': False,
+            'showland': False,
+            'lonaxis': {
+                'showgrid': True,
+                'range': [min_ra, max_ra],
+                'dtick': delta_ra,
+            },
+            'lataxis': {
+                'showgrid': True,
+                'range': [min_dec, max_dec],
+                'dtick': delta_dec,
+            },
+        }
+    }
+    figure = offline.plot(go.Figure(data=data, layout=layout), output_type='div', show_link=False)
+    return {'figure': figure}
+    
