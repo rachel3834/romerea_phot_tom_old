@@ -34,12 +34,19 @@ def fetch_primary_reference_photometry(conn,pri_refimg):
     
     return pri_phot_table
 
+def fetch_dataset_list(conn):
+    
+    query = 'SELECT * FROM reference_images'
+    datasets = phot_db.query_to_astropy_table(conn, query, args=())
+    
+    return datasets
+    
 def fetch_photometry_for_dataset(conn,ref_image_file):
     
     query = 'SELECT * FROM reference_images WHERE filename="'+str(ref_image_file)+'"'
     refimg = phot_db.query_to_astropy_table(conn, query, args=())
     
-    query = 'SELECT * FROM phot WHERE reference_image="'+str(refimg)+'"'
+    query = 'SELECT * FROM phot WHERE reference_image="'+str(refimg['refimg_id'][0])+'"'
     phot_table = phot_db.query_to_astropy_table(conn, query, args=())
     
     return phot_table

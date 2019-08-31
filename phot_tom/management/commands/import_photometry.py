@@ -7,12 +7,12 @@ Created on Wed Jul 24 20:47:18 2019
 
 from django.core.management.base import BaseCommand
 from tom_targets.models import Target, TargetExtra
-from tom_dataproducts import ReducedDatum, DataProductGroup
+from tom_dataproducts.models import ReducedDatum, DataProductGroup
 from astropy.coordinates import SkyCoord
 from astropy import units as u
 from pyDANDIA import phot_db
 from os import path
-import import_utils
+from phot_tom.management.commands import import_utils
 
 class Command(BaseCommand):
     
@@ -21,7 +21,6 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument('--phot_db_path', help='Path to pyDANDIA photometry database')
         parser.add_argument('--field_name', help='Name of the field')
-        parser.add_argument('--ref_image_file', help='Filename of the reference image for a specific dataset')
     
     def check_arguments(self, options):
         
@@ -35,7 +34,7 @@ class Command(BaseCommand):
         qs = DataProductsGroup.objects.filter(name='romerea')
         
         if len(qs) == 0:
-            group = DataProductGroup('name': 'romerea')
+            group = DataProductGroup({'name': 'romerea'})
             group.save()
             
         else:
@@ -72,50 +71,64 @@ class Command(BaseCommand):
         conn = phot_db.get_connection(dsn=options['phot_db_path'])
         
         pri_refimg = import_utils.fetch_primary_reference_image_from_phot_db(conn)
-                
-        phot_table = import_utils.fetch_photometry_for_dataset(conn,options['ref_image_file'])
         
-        group = self.fetch_or_create_data_product_group()
-        
-        stars_table = {}
-        products_table = {}
-        
-        for entry in phot_table:
-            
-            if entry.star_id not in stars_table.keys():
-                star = self.fetch_star_from_tom(options['field_name'],entry.star_id)
-                stars_table[entry.star_id] = star
-            else:
-                star = stars_table[entry.star_id]
-            
-            product_id = entry.facility+'_'+entry.filter.filter_name
+        datasets = import_utils.fetch_dataset_list(conn)
 
-            if star != None:
-                
-                product = self.fetch_dataproduct(product_id)
-                
-                if product == None:
-                    data_product_params = {'product_id': product_id,
-                                          'target': star,
-                                          'observation_record': None,
-                                          'data': None,  # This is used for uploaded file paths
-                                          'extra_data': entry.filter.filter_name,
-                                          'group': group,
-                                          'tag': 'PHOTOMETRY',
-                                          'featured': False,
-                                        }
-                    product = DataProduct.objects.create(**data_product_params)
-                
-                datum_params = {'target': star,
-                          'dataproduct': product,
-                          'producttype': 'PHOTOMETRY',
-                          'source_name': 
-                          'source_location':
-                          'timestamp':
-                          'value': 
-                        }
-                datum = ReducedDatum.objects.create(**datum_params)
+        for dset in datasets[0:1]:
             
-            else:
-                print('Skipping ingest for unknown star '+str(entry.star_id))
+            ref_image_file = dset['filename']
+            
+            print(ref_image_file)
+            
+            phot_table = import_utils.fetch_photometry_for_dataset(conn,ref_image_file)
+            
+            print(phot_table)
+            exit()
+            
+            group = self.fetch_or_create_data_product_group()
+        
+            stars_table = {}
+            products_table = {}
+            
+            for entry in phot_table:
                 
+                print(entry)
+                exit()
+                
+                if entry.star_id not in stars_table.keys():
+                    star = self.fetch_star_from_tom(options['field_name'],entry.star_id)
+                    stars_table[entry.star_id] = star
+                else:
+                    star = stars_table[entry.star_id]
+                
+                product_id = entry.facility+'_'+entry.filter.filter_name
+    
+                if star != None:
+                    
+                    product = self.fetch_dataproduct(product_id)
+                    
+                    if product == None:
+                        data_product_params = {'product_id': product_id,
+                                              'target': star,
+                                              'observation_record': None,
+                                              'data': None,  # This is used for uploaded file paths
+                                              'extra_data': entry.filter.filter_name,
+                                              'group': group,
+                                              'tag': 'PHOTOMETRY',
+                                              'featured': False,
+                                            }
+                        product = DataProduct.objects.create(**data_product_params)
+                    
+                    datum_params = {'target': star,
+                              'dataproduct': product,
+                              'producttype': 'PHOTOMETRY',
+                              'source_name': product_id,
+                              'source_location': entry.facility,
+                              'timestamp': None,
+                              'value': None,
+                            }
+                    datum = ReducedDatum.objects.create(**datum_params)
+                
+                else:
+                    print('Skipping ingest for unknown star '+str(entry.star_id))
+                    
