@@ -7,11 +7,14 @@ Created on Wed Jul 24 20:47:18 2019
 
 from django.core.management.base import BaseCommand
 from tom_targets.models import Target, TargetExtra
-from tom_dataproducts.models import ReducedDatum, DataProductGroup
+from tom_dataproducts.models import ReducedDatum, DataProductGroup, DataProduct
 from astropy.coordinates import SkyCoord
 from astropy import units as u
 from pyDANDIA import phot_db
 from os import path
+from datetime import datetime
+import pytz
+import json
 from phot_tom.management.commands import import_utils
 
 class Command(BaseCommand):
@@ -31,10 +34,10 @@ class Command(BaseCommand):
     
     def fetch_or_create_data_product_group(self):
         
-        qs = DataProductsGroup.objects.filter(name='romerea')
+        qs = DataProductGroup.objects.filter(name='romerea')
         
         if len(qs) == 0:
-            group = DataProductGroup({'name': 'romerea'})
+            group = DataProductGroup(**{'name': 'romerea'})
             group.save()
             
         else:
@@ -59,11 +62,47 @@ class Command(BaseCommand):
         
         qs = DataProduct.objects.filter(product_id=product_id)
         
-        if len(qs) == 0:
+        if len(qs) > 0:
             return qs[0]
         else:
             return None
+    
+    def identify_datasets(self, conn, phot_table, star):
+        
+        lut = {}
+        
+        for entry in phot_table[0:10]:
+                
+            key = str(entry['facility'])+'_'+str(entry['filter'])
             
+            if key in lut.keys():
+                dataset = lut[key]
+                
+            else:
+                dataset_code = import_utils.get_dataset_identifier(conn,entry)
+                
+                product_id = dataset_code+'_'+str(star['star_id'])
+                product = self.fetch_dataproduct(product_id)
+                
+                dataset = {'product_id': product_id,
+                           'product': product,
+                           'dataset_code': dataset_code}
+                          
+                lut[key] = dataset
+        
+        return lut
+        
+    def clear_old_data(self, dataset_lut, target):
+        
+        for key, dataset in dataset_lut.items():
+            
+            qs = ReducedDatum.objects.filter(target=target, data_product=dataset['product'])
+            print('Found '+str(len(qs))+' pre-existing Datums for '+str(target))
+        
+            for datum in qs:
+                print('-> Removing '+str(datum))
+                datum.delete()
+        
     def handle(self, *args, **options):
             
         self.check_arguments(options)
@@ -72,63 +111,63 @@ class Command(BaseCommand):
         
         pri_refimg = import_utils.fetch_primary_reference_image_from_phot_db(conn)
         
-        datasets = import_utils.fetch_dataset_list(conn)
-
-        for dset in datasets[0:1]:
-            
-            ref_image_file = dset['filename']
-            
-            print(ref_image_file)
-            
-            phot_table = import_utils.fetch_photometry_for_dataset(conn,ref_image_file)
-            
-            print(phot_table)
-            exit()
-            
-            group = self.fetch_or_create_data_product_group()
+        stars_table = import_utils.fetch_starlist_from_phot_db(conn,pri_refimg)
         
-            stars_table = {}
-            products_table = {}
+        group = self.fetch_or_create_data_product_group()
+        
+        for star in stars_table[0:1]:
             
-            for entry in phot_table:
+            phot_table = import_utils.fetch_photometry_for_star(conn,star['star_id'])
+            
+            target = self.fetch_star_from_tom(options['field_name'],star['star_id'])
+            
+            dataset_lut = self.identify_datasets(conn, phot_table, star)
+            
+            # Check for existing lightcurves for this star from the 
+            # facilities listed in the phot_db.  If data are present, delete the 
+            # associated Datums to clear the way for the new ingest
+            self.clear_old_data(dataset_lut, target)
+            
+            for entry in phot_table[0:10]:
                 
-                print(entry)
-                exit()
+                key = str(entry['facility'])+'_'+str(entry['filter'])
                 
-                if entry.star_id not in stars_table.keys():
-                    star = self.fetch_star_from_tom(options['field_name'],entry.star_id)
-                    stars_table[entry.star_id] = star
-                else:
-                    star = stars_table[entry.star_id]
+                dataset = dataset_lut[key]
+
+                if dataset['product'] == None:
+                    data_file = path.basename(options['phot_db_path'])+'.'+dataset['product_id']
                 
-                product_id = entry.facility+'_'+entry.filter.filter_name
-    
-                if star != None:
-                    
-                    product = self.fetch_dataproduct(product_id)
-                    
-                    if product == None:
-                        data_product_params = {'product_id': product_id,
-                                              'target': star,
-                                              'observation_record': None,
-                                              'data': None,  # This is used for uploaded file paths
-                                              'extra_data': entry.filter.filter_name,
-                                              'group': group,
-                                              'tag': 'PHOTOMETRY',
-                                              'featured': False,
-                                            }
-                        product = DataProduct.objects.create(**data_product_params)
-                    
-                    datum_params = {'target': star,
-                              'dataproduct': product,
-                              'producttype': 'PHOTOMETRY',
-                              'source_name': product_id,
-                              'source_location': entry.facility,
-                              'timestamp': None,
-                              'value': None,
-                            }
-                    datum = ReducedDatum.objects.create(**datum_params)
+                    data_product_params = {"product_id": dataset['product_id'],
+                                          "target": target,
+                                          "observation_record": None,
+                                          "data": data_file,  # This is used for uploaded file paths
+                                          "extra_data": dataset['dataset_code'].split('_')[-1],
+                                          "tag": "photometry",
+                                          "featured": False,
+                                        }
                 
-                else:
-                    print('Skipping ingest for unknown star '+str(entry.star_id))
-                    
+                    product = DataProduct.objects.create(**data_product_params)
+                    product.group.add(group)
+                
+                    dataset[product] = product
+                
+                image = import_utils.get_image_entry(conn,entry['image'])
+                date_obs = datetime.strptime(image['date_obs_utc'][0],"%Y-%m-%dT%H:%M:%S.%f")
+                date_obs = date_obs.replace(tzinfo=pytz.UTC)
+                
+                value = {"magnitude": entry['calibrated_mag'],
+                        "magnitude_error": entry['calibrated_mag_err'],
+                        "hjd": entry['hjd'],
+                        "filter": dataset['dataset_code'].split('_')[-1]}
+                                    
+                datum_params = {"target": target,
+                              "data_product": dataset['product'],
+                              "data_type": "photometry",
+                              "source_name": dataset['product_id'],
+                              "source_location": key,
+                              "timestamp": date_obs,
+                              "value": json.dumps(value),
+                              }
+                            
+                datum = ReducedDatum.objects.create(**datum_params)
+                
